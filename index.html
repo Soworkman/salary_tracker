@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <!-- 針對手機螢幕最佳化，鎖定縮放避免輸入時畫面走位 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>實時月薪監控器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #ffffff;
+            color: #0f172a;
+            margin: 0;
+            /* 使用 dvh 確保在手機瀏覽器上完美貼合可視高度，不受網址列影響 */
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 手機版主容器，限制最大寬度讓它在電腦上看也像手機 */
+        .app-container {
+            width: 100%;
+            max-width: 430px; /* iPhone Pro Max 寬度 */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        /* 頂部 Header */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: auto; padding-top: 10px; }
+        .time-group { display: flex; align-items: center; gap: 12px; }
+        .time { font-family: Arial, sans-serif; font-size: 20px; color: #0f172a; font-weight: 900; letter-spacing: -0.5px;}
+        .live-badge { display: flex; align-items: center; gap: 6px; background: #eff6ff; border: 1px solid #dbeafe; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; color: #2563eb; }
+        .dot { width: 6px; height: 6px; background: #3b82f6; border-radius: 50%; animation: pulse 1.5s infinite; }
+        
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
+        
+        .icon-btn { background: none; border: none; cursor: pointer; color: #94a3b8; padding: 8px; display: flex; transition: color 0.2s; border-radius: 12px;}
+        .icon-btn:active { background: #f1f5f9; }
+
+        /* 中間內容區塊：等距排版 */
+        .content-wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 32px;
+            width: 100%;
+            margin: auto 0;
+        }
+
+        .income-label { 
+            text-align: center; 
+            font-size: 16px; 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            color: #0f172a; 
+        }
+        
+        .income-value { 
+            text-align: center; 
+            font-family: Arial, sans-serif; 
+            font-size: 15vw; /* 根據手機寬度響應式調整數字 */
+            max-font-size: 72px;
+            font-weight: 900; 
+            color: #0f172a; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            letter-spacing: -1px;
+            white-space: nowrap; 
+        }
+
+        /* 為了讓大數字在超大螢幕不至於失控 */
+        @media (min-width: 430px) { .income-value { font-size: 64px; } }
+
+        /* 進度條區域 */
+        .progress-card { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 20px; padding: 24px; box-sizing: border-box; width: 100%;}
+        .progress-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; }
+        .progress-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+        .progress-percent { font-family: Arial, sans-serif; font-size: 20px; font-weight: 900; color: #2563eb; }
+        
+        .progress-track { height: 14px; background: #e2e8f0; border-radius: 10px; overflow: hidden; position: relative; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); transition: width 0.1s; position: relative; overflow: hidden; }
+        .progress-fill::after { content: ''; position: absolute; top: 0; left: 0; bottom: 0; right: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent); transform: translateX(-100%); animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 100% { transform: translateX(100%); } }
+
+        /* 設定面板 (滿版覆蓋) */
+        .settings-panel { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); padding: 32px; z-index: 50; flex-direction: column; justify-content: center;}
+        .settings-panel.active { display: flex; }
+        .input-group { margin-bottom: 24px; }
+        .input-group label { display: block; font-size: 13px; font-weight: 800; color: #64748b; margin-bottom: 8px; }
+        .input-group input { width: 100%; box-sizing: border-box; padding: 16px 20px; border-radius: 16px; border: 2px solid #e2e8f0; background: #f8fafc; font-family: Arial, sans-serif; font-size: 20px; font-weight: bold; outline: none; transition: border-color 0.2s;}
+        .input-group input:focus { border-color: #3b82f6; background: #ffffff;}
+        .save-btn { width: 100%; background: #0f172a; color: white; border: none; padding: 18px; border-radius: 16px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px;}
+        .save-btn:active { transform: scale(0.98); }
+
+        /* 放工慶祝 */
+        #celebration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(37, 99, 235, 0.95); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        #celebration.show { opacity: 1; pointer-events: auto; }
+        .celeb-text { color: white; font-size: 28px; font-weight: 900; text-align: center; line-height: 1.4;}
+        .celeb-emoji { font-size: 80px; margin-bottom: 20px; animation: bounce 1s infinite; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- 頂部 Header -->
+        <div class="header">
+            <div class="time-group">
+                <div class="time" id="time">12:00:00 AM</div>
+                <div class="live-badge"><div class="dot"></div>Live</div>
+            </div>
+            <div class="actions">
+                <!-- 網頁版不需要大頭釘，只保留設定按鈕 -->
+                <button class="icon-btn" id="settings-btn" title="設定參數">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 核心內容 (等距排版) -->
+        <div class="content-wrapper">
+            <div class="income-label">💰 本月你已經賺了</div>
+            
+            <div class="income-value"><span>$</span><span id="income">0.00</span></div>
+            
+            <div class="progress-card">
+                <div class="progress-header">
+                    <div class="progress-label">目標進度</div>
+                    <div class="progress-percent" id="progress-text">0.00%</div>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 設定面板 -->
+        <div class="settings-panel" id="settings-panel">
+            <h2 style="font-size: 24px; font-weight: 900; margin-bottom: 24px; color: #0f172a;">設定參數</h2>
+            <div class="input-group">
+                <label>設定月薪金額</label>
+                <!-- 在手機上呼叫數字鍵盤 -->
+                <input type="number" id="input-salary" inputmode="numeric" pattern="[0-9]*" value="35000">
+            </div>
+            <div class="input-group">
+                <label>放工時間 (例如 18:00)</label>
+                <input type="time" id="input-offtime" value="18:00">
+            </div>
+            <button class="save-btn" id="save-btn">儲存設定並關閉</button>
+        </div>
+
+        <!-- 放工慶祝畫面 -->
+        <div id="celebration">
+            <div class="celeb-emoji">🎉</div>
+            <div class="celeb-text">恭喜你！<br>又賺咗一日啦！</div>
+        </div>
+    </div>
+
+    <script>
+        // 讀取本地儲存的設定 (網頁版使用 localStorage 代替 chrome.storage)
+        let salary = Number(localStorage.getItem('salary')) || 35000;
+        let offTime = localStorage.getItem('offTime') || "18:00";
+        let isCelebrated = false;
+
+        const timeEl = document.getElementById('time');
+        const incomeEl = document.getElementById('income');
+        const progressTextEl = document.getElementById('progress-text');
+        const progressBarEl = document.getElementById('progress-bar');
+        const settingsPanel = document.getElementById('settings-panel');
+        const inputSalary = document.getElementById('input-salary');
+        const inputOffTime = document.getElementById('input-offtime');
+        const celebScreen = document.getElementById('celebration');
+
+        // 初始化設定面板的數值
+        inputSalary.value = salary;
+        inputOffTime.value = offTime;
+
+        function update() {
+            const now = new Date();
+            
+            // 更新時間顯示 (12 小時制)
+            timeEl.innerText = now.toLocaleTimeString('en-US', { 
+                hour12: true, 
+                hour: 'numeric', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+
+            // 計算金額邏輯
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+            const totalSeconds = lastDayOfMonth * 24 * 60 * 60;
+            const rate = salary / totalSeconds;
+            
+            const startOfMonth = new Date(year, month, 1);
+            const secondsPassed = (now.getTime() - startOfMonth.getTime()) / 1000;
+            const earned = secondsPassed * rate;
+            const progress = (earned / salary) * 100;
+
+            // 更新數字顯示
+            incomeEl.innerText = earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            progressTextEl.innerText = Math.min(progress, 100).toFixed(2) + '%';
+            progressBarEl.style.width = Math.min(progress, 100) + '%';
+
+            // 放工慶祝邏輯
+            const hours24 = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const currentTimeString = `${hours24}:${minutes}`; 
+            
+            if (currentTimeString === offTime && now.getSeconds() < 10) {
+                if (!isCelebrated) {
+                    celebScreen.classList.add('show');
+                    setTimeout(() => {
+                        celebScreen.classList.remove('show');
+                        isCelebrated = true; 
+                    }, 10000); // 顯示 10 秒
+                }
+            } else {
+                isCelebrated = false; 
+            }
+        }
+
+        // 啟動計時器，每 100 毫秒跳動一次
+        setInterval(update, 100);
+        update();
+
+        // 設定面板控制
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            settingsPanel.classList.add('active');
+        });
+
+        document.getElementById('save-btn').addEventListener('click', () => {
+            salary = Number(inputSalary.value) || 0;
+            offTime = inputOffTime.value;
+            
+            // 儲存至瀏覽器本地端
+            localStorage.setItem('salary', salary);
+            localStorage.setItem('offTime', offTime);
+            
+            settingsPanel.classList.remove('active');
+            update(); 
+        });
+
+        // 避免 iOS 縮放問題，阻止雙擊放大
+        document.addEventListener('dblclick', function(event) {
+            event.preventDefault();
+        }, { passive: false });
+    </script>
+</body>
+</html>
